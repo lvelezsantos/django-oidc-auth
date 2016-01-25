@@ -2,7 +2,7 @@ from urllib import urlencode
 from django.conf import settings
 from django.http import HttpResponseBadRequest
 from django.contrib.auth import REDIRECT_FIELD_NAME, authenticate, login as django_login
-from django.core.urlresolvers import reverse
+from django.core.urlresolvers import reverse, reverse_lazy
 from django.shortcuts import render, redirect
 import requests
 
@@ -44,10 +44,11 @@ def _redirect(request, login_complete_view, form_class, redirect_field_name):
     params = urlencode({
         'response_type': 'code',
         'scope': utils.scopes(),
-        # 'redirect_uri': request.build_absolute_uri(reverse(login_complete_view)),
+        'redirect_uri': request.build_absolute_uri(reverse(login_complete_view)),
         'client_id': provider.client_id,
         'state': nonce.state
     })
+
     redirect_url = '%s?%s' % (provider.authorization_endpoint, params)
 
     log.debug('Redirecting to %s' % redirect_url)
@@ -83,7 +84,7 @@ def login_complete(request, login_complete_view='oidc-complete',
 
     response = requests.post(provider.token_endpoint,
                              auth=provider.client_credentials,
-                             params=params, verify=oidc_settings.VERIFY_SSL)
+                             data=params, verify=oidc_settings.VERIFY_SSL)
 
     if response.status_code != 200:
         raise errors.RequestError(provider.token_endpoint, response.status_code)
@@ -92,7 +93,17 @@ def login_complete(request, login_complete_view='oidc-complete',
     credentials = response.json()
     credentials['provider'] = provider
     user = authenticate(credentials=credentials)
-    django_login(request, user)
+    if user.is_active:
+        django_login(request, user)
+    else:
+        url = u'{0}?post_logout_redirect_uri={1}'.format(
+            oidc_settings.DEFAULT_PROVIDER.get('logout'),
+            request.build_absolute_uri(str(reverse_lazy('oidc-inactive-user')))
+        )
+        print url
+        return redirect(
+            url
+        )
 
     return redirect(nonce.redirect_url)
 
@@ -106,3 +117,8 @@ def _redirect_to_provider(request):
 
     return (not oidc_settings.DISABLE_OIDC
             and (has_default_provider or request.method == 'POST'))
+
+
+def inactive_user(request,):
+
+    return render(request, 'oidc/inactive_user.html', {})
