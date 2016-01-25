@@ -73,7 +73,7 @@ class OpenIDProvider(models.Model):
     token_endpoint = models.URLField()
     userinfo_endpoint = models.URLField()
     jwks_uri = models.URLField(null=True, blank=True)
-    signing_alg = models.CharField(max_length=5, choices=SIGNING_ALGS, default=HS256)
+    signing_alg = models.CharField(max_length=5, choices=SIGNING_ALGS, default=RS256)
 
     client_id = models.CharField(max_length=255)
     client_secret = models.CharField(max_length=255)
@@ -224,26 +224,30 @@ class OpenIDUser(models.Model):
             log.debug("OpenIDUser for sub %s not found, so it'll be created" % id_token['sub'])
 
         # Find an existing User locally or create a new one
+        claims = cls._get_userinfo(provider, id_token['sub'],
+                    access_token, refresh_token)
+        username = claims.get('preferred_username')
         try:
-            user = UserModel.objects.get(username__iexact=id_token['sub'])
+            user = UserModel.objects.get(username__iexact=username)
             log.debug('Found user with username %s locally' % id_token['sub'])
         except UserModel.MultipleObjectsReturned:
-            user = UserModel.objects.filter(username__iexact=id_token['sub'])[0]
+            user = UserModel.objects.filter(username__iexact=username)[0]
             log.warn('Multiple users found with username %s! First match will be selected' % id_token['sub'])
         except UserModel.DoesNotExist:
             log.debug('User with username %s not found locally, '
                       'so it will be created' % id_token['sub'])
 
-            claims = cls._get_userinfo(provider, id_token['sub'],
-                    access_token, refresh_token)
+            # claims = cls._get_userinfo(provider, id_token['sub'],
+            #         access_token, refresh_token)
 
             user = UserModel()
 
-            user.username   = claims['preferred_username']
-            user.email      = claims['email']
-            user.first_name = claims['given_name']
-            user.last_name  = claims['family_name']
+            user.username   = claims.get('preferred_username')
+            user.email      = claims.get('email')
+            user.first_name = claims.get('given_name', '')
+            user.last_name  = claims.get('family_name', '')
             user.set_unusable_password()
+            user.is_active = False
 
             user.save()
 
@@ -281,8 +285,8 @@ class OpenIDUser(models.Model):
         if claims['sub'] != sub:
             raise errors.InvalidUserInfo()
 
-        name = '%s %s' % (claims['given_name'], claims['family_name'])
+        name = '%s: %s %s' % (claims.get('nickname', ''), claims.get('given_name', ''), claims.get('family_name', ''))
         log.debug('userinfo of sub: %s -> name: %s, preferred_username: %s, email: %s' % (sub,
-            name, claims['preferred_username'], claims['email']))
+            name, claims.get('preferred_username', ''), claims.get('email', '')))
 
         return claims
