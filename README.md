@@ -9,7 +9,7 @@ HOW TO USE
 
 First things first, so:
 
-    $ pip install django-oidc-auth
+    $ pip install https://github.com/nokiadev/django-oidc-auth.git
 
 Then add this to your settings:
 
