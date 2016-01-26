@@ -75,6 +75,7 @@ class OpenIDProvider(models.Model):
     jwks_uri = models.URLField(null=True, blank=True)
     signing_alg = models.CharField(max_length=5, choices=SIGNING_ALGS, default=RS256)
 
+    logout = models.CharField(max_length=255, blank=True, null=True)
     client_id = models.CharField(max_length=255)
     client_secret = models.CharField(max_length=255)
 
